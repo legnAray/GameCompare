@@ -7,7 +7,7 @@
     <div>
         <p class="eyebrow">PERSONAL RANKING</p>
         <h1>我的游戏排名</h1>
-        <p class="page-description">排名来自你的两两选择；比较越多，它越接近真实偏好。</p>
+        <p class="page-description">排名由主动采样与自适应 Elo 生成；比较越多，结果越稳定。</p>
     </div>
     <a class="button primary" href="compare">继续比较</a>
 </header>
@@ -54,7 +54,7 @@ else
                     <h2>@item.Game.Name</h2>
                     <p>@RankMetadata(item.Game)</p>
                 </div>
-                <div class="confidence" title="比较次数越多，结果越稳定">
+                <div class="confidence" title="比较越多，后续单次选择造成的波动越小">
                     <div class="confidence-label"><span>稳定度</span><strong>@Confidence(item)%</strong></div>
                     <div class="confidence-track"><div class="confidence-fill" style="@($"width: {Confidence(item)}%")"></div></div>
                 </div>

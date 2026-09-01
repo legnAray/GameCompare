@@ -43,6 +43,7 @@ public partial class App : Application
 
             serviceProvider = services.BuildServiceProvider();
             await serviceProvider.GetRequiredService<IGameRepository>().InitializeAsync();
+            await serviceProvider.GetRequiredService<GameComparisonService>().RebuildRatingsAsync();
 
             var window = serviceProvider.GetRequiredService<MainWindow>();
             MainWindow = window;

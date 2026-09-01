@@ -5,9 +5,10 @@ namespace GameCompare.Core;
 
 public sealed class EloRankingAlgorithm : IRankingAlgorithm
 {
-    public const string Version = "elo-v1-k32";
+    public const string Version = "elo-v2-adaptive-k";
     private const double InitialRating = 1500;
-    private const double KFactor = 32;
+    private const double MinimumKFactor = 16;
+    private const double NewGameKBoost = 32;
 
     public string AlgorithmVersion => Version;
 
@@ -38,9 +39,11 @@ public sealed class EloRankingAlgorithm : IRankingAlgorithm
             var rightExpected = 1 - leftExpected;
             var leftActual = comparison.Outcome == ComparisonOutcome.Left ? 1d : 0d;
             var rightActual = 1 - leftActual;
+            var leftKFactor = KFactor(counts[comparison.LeftGameId]);
+            var rightKFactor = KFactor(counts[comparison.RightGameId]);
 
-            ratings[comparison.LeftGameId] = leftRating + KFactor * (leftActual - leftExpected);
-            ratings[comparison.RightGameId] = rightRating + KFactor * (rightActual - rightExpected);
+            ratings[comparison.LeftGameId] = leftRating + leftKFactor * (leftActual - leftExpected);
+            ratings[comparison.RightGameId] = rightRating + rightKFactor * (rightActual - rightExpected);
             counts[comparison.LeftGameId]++;
             counts[comparison.RightGameId]++;
         }
@@ -73,4 +76,7 @@ public sealed class EloRankingAlgorithm : IRankingAlgorithm
 
     private static double ExpectedScore(double rating, double opponentRating) =>
         1d / (1d + Math.Pow(10d, (opponentRating - rating) / 400d));
+
+    private static double KFactor(int comparisonCount) =>
+        MinimumKFactor + NewGameKBoost / Math.Sqrt(comparisonCount + 1d);
 }
