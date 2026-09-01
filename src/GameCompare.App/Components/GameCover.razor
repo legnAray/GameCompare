@@ -1,0 +1,27 @@
+@inject CoverImageService CoverImages
+
+<div class="game-cover @Class">
+    @if (Source is { Length: > 0 })
+    {
+        <img src="@Source" alt="@Alt" loading="lazy" />
+    }
+    else
+    {
+        <div class="cover-placeholder" aria-label="暂无封面">
+            <span>GC</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? Path { get; set; }
+
+    [Parameter]
+    public string Alt { get; set; } = "游戏封面";
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string? Source => CoverImages.GetSource(Path);
+}

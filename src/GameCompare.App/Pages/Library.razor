@@ -1,0 +1,223 @@
+@page "/"
+@inject IGameRepository Repository
+@inject GameSyncService SyncService
+@inject GameComparisonService ComparisonService
+@inject AppSettingsService SettingsService
+@inject CoverImageService CoverImages
+
+<PageTitle>游戏库 · GameCompare</PageTitle>
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">PLAYNITE · COMPLETED</p>
+        <h1>我的通关游戏</h1>
+        <p class="page-description">从 Playnite 读取完成状态，保留属于你的游玩记忆。</p>
+    </div>
+    <button class="button primary sync-button" @onclick="SynchronizeAsync" disabled="@isSyncing">
+        <span class="button-icon @(isSyncing ? "spinning" : null)">↻</span>
+        @(isSyncing ? "正在读取…" : "从 Playnite 同步")
+    </button>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="notice error" role="alert">
+        <strong>同步没有完成</strong>
+        <span>@errorMessage</span>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <div class="notice success" role="status">
+        <strong>同步完成</strong>
+        <span>@successMessage</span>
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="loading-panel"><span class="loader"></span>正在载入游戏库…</div>
+}
+else if (games.Count == 0)
+{
+    <section class="empty-state library-empty">
+        <div class="empty-mark">＋</div>
+        <h2>先把通关游戏带进来</h2>
+        <p>关闭 Playnite 后点击同步。我们只读取标记为 <code>Completed</code> 的游戏。</p>
+        <button class="button primary" @onclick="SynchronizeAsync" disabled="@isSyncing">
+            @(isSyncing ? "正在读取…" : "读取 Playnite 游戏库")
+        </button>
+        <a class="text-link" href="settings">检查数据目录</a>
+    </section>
+}
+else
+{
+    <section class="library-toolbar">
+        <div class="library-stats">
+            <strong>@games.Count</strong>
+            <span>款已完成</span>
+            @if (latestSync is not null)
+            {
+                <span class="stat-divider"></span>
+                <span>上次同步 @latestSync.FinishedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+            }
+        </div>
+        <div class="toolbar-controls">
+            <label class="search-box">
+                <span>⌕</span>
+                <input @bind="searchText" @bind:event="oninput" placeholder="搜索游戏、开发商或类型" />
+            </label>
+            <select class="select-control" @bind="sortMode" aria-label="排序方式">
+                <option value="name">名称</option>
+                <option value="release-desc">发布时间（新到旧）</option>
+                <option value="playtime-desc">游玩时长</option>
+                <option value="rank">当前排名</option>
+            </select>
+        </div>
+    </section>
+
+    @if (VisibleGames.Count == 0)
+    {
+        <div class="no-results">没有找到与“@searchText”匹配的游戏。</div>
+    }
+    else
+    {
+        <section class="game-grid" aria-label="游戏列表">
+            @foreach (var item in VisibleGames)
+            {
+                <article class="game-card">
+                    <GameCover Path="@item.Game.CoverPath" Alt="@($"{item.Game.Name} 封面")" />
+                    <div class="game-card-body">
+                        <div class="card-title-row">
+                            <h2 title="@item.Game.Name">@item.Game.Name</h2>
+                            @if (item.Rank is not null)
+                            {
+                                <span class="rank-chip">#@item.Rank</span>
+                            }
+                        </div>
+                        <p class="card-primary-meta">@PrimaryMetadata(item.Game)</p>
+                        <p class="card-secondary-meta">@SecondaryMetadata(item.Game)</p>
+                        <div class="card-footer">
+                            <span>@FormatPlaytime(item.Game.PlaytimeSeconds)</span>
+                            <span>@item.ComparisonCount 次比较</span>
+                        </div>
+                    </div>
+                </article>
+            }
+        </section>
+    }
+}
+
+@code {
+    private IReadOnlyList<GameListItem> games = Array.Empty<GameListItem>();
+    private SyncRun? latestSync;
+    private bool isLoading = true;
+    private bool isSyncing;
+    private string searchText = string.Empty;
+    private string sortMode = "name";
+    private string? errorMessage;
+    private string? successMessage;
+
+    private IReadOnlyList<GameListItem> VisibleGames
+    {
+        get
+        {
+            IEnumerable<GameListItem> query = games;
+            if (!string.IsNullOrWhiteSpace(searchText))
+            {
+                query = query.Where(item => SearchText(item).Contains(
+                    searchText.Trim(),
+                    StringComparison.CurrentCultureIgnoreCase));
+            }
+
+            query = sortMode switch
+            {
+                "release-desc" => query
+                    .OrderByDescending(item => item.Game.ReleaseDate)
+                    .ThenBy(item => item.Game.Name, StringComparer.CurrentCultureIgnoreCase),
+                "playtime-desc" => query
+                    .OrderByDescending(item => item.Game.PlaytimeSeconds)
+                    .ThenBy(item => item.Game.Name, StringComparer.CurrentCultureIgnoreCase),
+                "rank" => query
+                    .OrderBy(item => item.Rank ?? int.MaxValue)
+                    .ThenBy(item => item.Game.Name, StringComparer.CurrentCultureIgnoreCase),
+                _ => query.OrderBy(item => item.Game.Name, StringComparer.CurrentCultureIgnoreCase)
+            };
+            return query.ToArray();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        isLoading = false;
+    }
+
+    private async Task SynchronizeAsync()
+    {
+        if (isSyncing)
+        {
+            return;
+        }
+
+        isSyncing = true;
+        errorMessage = null;
+        successMessage = null;
+        try
+        {
+            var settings = await SettingsService.LoadAsync();
+            var result = await SyncService.SynchronizeAsync(settings.PlaynitePath);
+            await ComparisonService.RebuildRatingsAsync();
+            CoverImages.Clear();
+            await ReloadAsync();
+            successMessage = $"读取 {result.ImportedCount} 款，更新 {result.UpdatedCount} 款，移出当前列表 {result.DeactivatedCount} 款。";
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isSyncing = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        games = await Repository.GetActiveGamesAsync();
+        latestSync = await Repository.GetLatestSyncRunAsync();
+    }
+
+    private static string SearchText(GameListItem item) => string.Join(' ',
+        item.Game.Name,
+        item.Game.Developers,
+        item.Game.Publishers,
+        item.Game.Genres,
+        item.Game.Platforms);
+
+    private static string PrimaryMetadata(GameRecord game)
+    {
+        var year = game.ReleaseDate?.Year.ToString(CultureInfo.InvariantCulture);
+        var developer = FirstOrFallback(game.Developers, "未知开发商");
+        return string.Join(" · ", new[] { year, developer }.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static string SecondaryMetadata(GameRecord game) =>
+        !string.IsNullOrWhiteSpace(game.Genres)
+            ? game.Genres
+            : FirstOrFallback(game.Platforms, game.Source ?? "暂无更多资料");
+
+    private static string FirstOrFallback(string? value, string fallback) =>
+        string.IsNullOrWhiteSpace(value) ? fallback : value.Split(',')[0].Trim();
+
+    private static string FormatPlaytime(ulong seconds)
+    {
+        if (seconds == 0)
+        {
+            return "未记录时长";
+        }
+
+        var hours = seconds / 3600d;
+        return hours < 1 ? $"{Math.Max(1, (int)Math.Round(seconds / 60d))} 分钟" : $"{hours:0.#} 小时";
+    }
+}

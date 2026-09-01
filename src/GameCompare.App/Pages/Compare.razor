@@ -1,0 +1,140 @@
+@page "/compare"
+@inject GameComparisonService ComparisonService
+
+<PageTitle>开始比较 · GameCompare</PageTitle>
+
+<header class="page-header compare-header">
+    <div>
+        <p class="eyebrow">PAIRWISE CHOICE</p>
+        <h1>这一刻，你更喜欢哪一个？</h1>
+        <p class="page-description">跟随第一反应。每一次选择都会慢慢勾勒出你的游戏偏好。</p>
+    </div>
+    @if (choiceCount > 0)
+    {
+        <div class="session-counter"><strong>@choiceCount</strong><span>本次已比较</span></div>
+    }
+</header>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="notice error" role="alert"><strong>无法继续比较</strong><span>@errorMessage</span></div>
+}
+
+@if (isLoading)
+{
+    <div class="loading-panel"><span class="loader"></span>正在挑选一组游戏…</div>
+}
+else if (currentPair is null)
+{
+    <section class="empty-state">
+        <div class="empty-mark">VS</div>
+        <h2>还需要至少两款游戏</h2>
+        <p>先从 Playnite 同步两款以上标记为 Completed 的游戏。</p>
+        <a class="button primary" href="/">回到游戏库</a>
+    </section>
+}
+else
+{
+    <section class="duel-board" aria-label="选择更喜欢的游戏">
+        <button class="duel-card" @onclick="() => ChooseAsync(ComparisonOutcome.Left)" disabled="@isSaving">
+            <GameCover Path="@currentPair.Left.Game.CoverPath"
+                       Alt="@($"{currentPair.Left.Game.Name} 封面")"
+                       Class="duel-cover" />
+            <div class="duel-gradient"></div>
+            <div class="duel-copy">
+                <span class="choose-hint">选择这个</span>
+                <h2>@currentPair.Left.Game.Name</h2>
+                <p>@GameMetadata(currentPair.Left.Game)</p>
+            </div>
+        </button>
+
+        <div class="versus-badge">VS</div>
+
+        <button class="duel-card" @onclick="() => ChooseAsync(ComparisonOutcome.Right)" disabled="@isSaving">
+            <GameCover Path="@currentPair.Right.Game.CoverPath"
+                       Alt="@($"{currentPair.Right.Game.Name} 封面")"
+                       Class="duel-cover" />
+            <div class="duel-gradient"></div>
+            <div class="duel-copy">
+                <span class="choose-hint">选择这个</span>
+                <h2>@currentPair.Right.Game.Name</h2>
+                <p>@GameMetadata(currentPair.Right.Game)</p>
+            </div>
+        </button>
+    </section>
+
+    <div class="compare-actions">
+        <button class="button ghost" @onclick="SkipAsync" disabled="@isSaving">
+            都不想选，换一组
+        </button>
+        <span>@(isSaving ? "正在记录你的选择…" : "跳过不会影响分数")</span>
+    </div>
+}
+
+@code {
+    private readonly Guid sessionId = Guid.NewGuid();
+    private GamePair? currentPair;
+    private bool isLoading = true;
+    private bool isSaving;
+    private int choiceCount;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNextAsync();
+        isLoading = false;
+    }
+
+    private Task SkipAsync() => ChooseAsync(ComparisonOutcome.Skip);
+
+    private async Task ChooseAsync(ComparisonOutcome outcome)
+    {
+        if (isSaving || currentPair is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+        try
+        {
+            await ComparisonService.RecordAsync(currentPair, outcome, sessionId);
+            if (outcome != ComparisonOutcome.Skip)
+            {
+                choiceCount++;
+            }
+            await LoadNextAsync();
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task LoadNextAsync()
+    {
+        currentPair = await ComparisonService.GetNextPairAsync();
+    }
+
+    private static string GameMetadata(GameRecord game)
+    {
+        var parts = new List<string>();
+        if (game.ReleaseDate is not null)
+        {
+            parts.Add(game.ReleaseDate.Value.Year.ToString(CultureInfo.InvariantCulture));
+        }
+        if (!string.IsNullOrWhiteSpace(game.Developers))
+        {
+            parts.Add(game.Developers.Split(',')[0].Trim());
+        }
+        if (!string.IsNullOrWhiteSpace(game.Genres))
+        {
+            parts.Add(game.Genres.Split(',')[0].Trim());
+        }
+        return parts.Count == 0 ? "暂无更多资料" : string.Join(" · ", parts);
+    }
+}

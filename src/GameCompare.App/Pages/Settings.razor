@@ -1,0 +1,132 @@
+@page "/settings"
+@inject AppSettingsService SettingsService
+@inject FolderPickerService FolderPicker
+@inject IPlayniteImporter Importer
+
+<PageTitle>设置 · GameCompare</PageTitle>
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">SETTINGS</p>
+        <h1>设置</h1>
+        <p class="page-description">告诉 GameCompare 去哪里寻找你的 Playnite 游戏库。</p>
+    </div>
+</header>
+
+<section class="settings-panel">
+    <div class="settings-heading">
+        <div class="settings-icon">P</div>
+        <div>
+            <h2>Playnite 数据目录</h2>
+            <p>通常位于 <code>%LocalAppData%\Playnite</code>。同步前请先完全关闭 Playnite。</p>
+        </div>
+    </div>
+
+    <label class="field-label" for="playnite-path">目录路径</label>
+    <div class="path-editor">
+        <input id="playnite-path" class="text-control" @bind="playnitePath" />
+        <button class="button secondary" @onclick="Browse">浏览…</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="inline-status @(isError ? "status-error" : "status-success")">@message</div>
+    }
+
+    <div class="settings-actions">
+        <button class="button primary" @onclick="SaveAsync" disabled="@isBusy">保存设置</button>
+        <button class="button ghost" @onclick="ValidateAsync" disabled="@isBusy">
+            @(isBusy ? "正在读取…" : "验证并统计 Completed")
+        </button>
+    </div>
+</section>
+
+<section class="settings-panel compact-panel">
+    <div class="settings-heading">
+        <div class="settings-icon muted">i</div>
+        <div>
+            <h2>数据如何保存</h2>
+            <p>Playnite 数据仅以只读方式导入。本程序自己的游戏快照、比较记录与排名保存在本机
+                <code>%LocalAppData%\GameCompare</code>，不会修改 Playnite。</p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string playnitePath = string.Empty;
+    private string? message;
+    private bool isError;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        playnitePath = (await SettingsService.LoadAsync()).PlaynitePath;
+    }
+
+    private void Browse()
+    {
+        var selected = FolderPicker.PickPlayniteDirectory(playnitePath);
+        if (!string.IsNullOrWhiteSpace(selected))
+        {
+            playnitePath = selected;
+            message = null;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!ValidatePath())
+        {
+            return;
+        }
+
+        await SettingsService.SaveAsync(new AppSettings(Path.GetFullPath(playnitePath.Trim())));
+        isError = false;
+        message = "设置已保存。";
+    }
+
+    private async Task ValidateAsync()
+    {
+        if (!ValidatePath() || isBusy)
+        {
+            return;
+        }
+
+        isBusy = true;
+        message = null;
+        try
+        {
+            var batch = await Importer.ImportCompletedGamesAsync(playnitePath.Trim());
+            isError = false;
+            message = $"读取成功：找到 {batch.Games.Count} 款 Completed 游戏。";
+        }
+        catch (Exception exception)
+        {
+            isError = true;
+            message = exception.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private bool ValidatePath()
+    {
+        if (string.IsNullOrWhiteSpace(playnitePath))
+        {
+            isError = true;
+            message = "请先选择 Playnite 数据目录。";
+            return false;
+        }
+
+        if (!PlaynitePathDetector.IsPlayniteDataDirectory(playnitePath.Trim()))
+        {
+            isError = true;
+            message = "该目录下没有找到 Playnite 的 library 数据库。";
+            return false;
+        }
+
+        return true;
+    }
+}

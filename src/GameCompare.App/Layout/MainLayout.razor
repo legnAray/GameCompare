@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-mark">GC</div>
+            <div>
+                <div class="brand-name">GameCompare</div>
+                <div class="brand-subtitle">你的通关游戏坐标</div>
+            </div>
+        </div>
+
+        <nav class="navigation" aria-label="主导航">
+            <NavLink href="/" Match="NavLinkMatch.All">
+                <span class="nav-icon">▦</span>
+                <span>游戏库</span>
+            </NavLink>
+            <NavLink href="compare">
+                <span class="nav-icon">VS</span>
+                <span>开始比较</span>
+            </NavLink>
+            <NavLink href="ranking">
+                <span class="nav-icon">#</span>
+                <span>我的排名</span>
+            </NavLink>
+        </nav>
+
+        <nav class="navigation navigation-bottom" aria-label="设置">
+            <NavLink href="settings">
+                <span class="nav-icon">⚙</span>
+                <span>设置</span>
+            </NavLink>
+        </nav>
+    </aside>
+
+    <main class="content">
+        @Body
+    </main>
+</div>

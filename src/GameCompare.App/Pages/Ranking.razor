@@ -1,0 +1,111 @@
+@page "/ranking"
+@inject IGameRepository Repository
+
+<PageTitle>我的排名 · GameCompare</PageTitle>
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">PERSONAL RANKING</p>
+        <h1>我的游戏排名</h1>
+        <p class="page-description">排名来自你的两两选择；比较越多，它越接近真实偏好。</p>
+    </div>
+    <a class="button primary" href="compare">继续比较</a>
+</header>
+
+@if (isLoading)
+{
+    <div class="loading-panel"><span class="loader"></span>正在计算排名…</div>
+}
+else if (allGames.Count == 0)
+{
+    <section class="empty-state">
+        <div class="empty-mark">#</div>
+        <h2>排名榜还是空的</h2>
+        <p>同步 Playnite 游戏库后，就可以开始比较。</p>
+        <a class="button primary" href="/">去同步游戏</a>
+    </section>
+}
+else
+{
+    <section class="ranking-summary">
+        <div><strong>@allGames.Count</strong><span>款游戏</span></div>
+        <div><strong>@TotalChoices</strong><span>次有效比较</span></div>
+        <div><strong>@ComparedGameCount</strong><span>款参与过比较</span></div>
+    </section>
+
+    @if (rankedGames.Count == 0)
+    {
+        <section class="empty-state ranking-empty">
+            <div class="empty-mark">VS</div>
+            <h2>还没有形成排名</h2>
+            <p>做出第一组选择后，参与比较的游戏就会出现在这里。</p>
+            <a class="button primary" href="compare">开始第一次比较</a>
+        </section>
+    }
+    else
+    {
+        <section class="ranking-list" aria-label="游戏排名">
+        @foreach (var item in rankedGames)
+        {
+            <article class="ranking-row @(item.Rank is <= 3 ? "top-rank" : null)">
+                <div class="rank-number">@(item.Rank?.ToString() ?? "—")</div>
+                <GameCover Path="@item.Game.CoverPath" Alt="@($"{item.Game.Name} 封面")" Class="ranking-cover" />
+                <div class="ranking-game">
+                    <h2>@item.Game.Name</h2>
+                    <p>@RankMetadata(item.Game)</p>
+                </div>
+                <div class="confidence" title="比较次数越多，结果越稳定">
+                    <div class="confidence-label"><span>稳定度</span><strong>@Confidence(item)%</strong></div>
+                    <div class="confidence-track"><div class="confidence-fill" style="@($"width: {Confidence(item)}%")"></div></div>
+                </div>
+                <div class="rating-value">
+                    <strong>@(item.Rating?.ToString("0") ?? "—")</strong>
+                    <span>@item.ComparisonCount 次比较</span>
+                </div>
+            </article>
+        }
+        </section>
+        @if (UnrankedCount > 0)
+        {
+            <p class="unranked-note">另有 @UnrankedCount 款游戏尚未参与比较。</p>
+        }
+    }
+}
+
+@code {
+    private IReadOnlyList<GameListItem> allGames = Array.Empty<GameListItem>();
+    private IReadOnlyList<GameListItem> rankedGames = Array.Empty<GameListItem>();
+    private bool isLoading = true;
+
+    private int TotalChoices => allGames.Sum(item => item.ComparisonCount) / 2;
+
+    private int ComparedGameCount => allGames.Count(item => item.ComparisonCount > 0);
+
+    private int UnrankedCount => allGames.Count - rankedGames.Count;
+
+    protected override async Task OnInitializedAsync()
+    {
+        allGames = await Repository.GetActiveGamesAsync();
+        rankedGames = allGames
+            .Where(item => item.Rank is not null && item.ComparisonCount > 0)
+            .OrderBy(item => item.Rank ?? int.MaxValue)
+            .ThenByDescending(item => item.Rating)
+            .ThenBy(item => item.Game.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        isLoading = false;
+    }
+
+    private static int Confidence(GameListItem item) =>
+        (int)Math.Round(Math.Clamp(1d - (item.Uncertainty ?? 1d), 0d, 1d) * 100d);
+
+    private static string RankMetadata(GameRecord game)
+    {
+        var parts = new[]
+        {
+            game.ReleaseDate?.Year.ToString(CultureInfo.InvariantCulture),
+            string.IsNullOrWhiteSpace(game.Developers) ? null : game.Developers.Split(',')[0].Trim(),
+            string.IsNullOrWhiteSpace(game.Genres) ? null : game.Genres.Split(',')[0].Trim()
+        };
+        return string.Join(" · ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
+    }
+}
