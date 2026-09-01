@@ -89,6 +89,26 @@ public sealed class GameRepositoryTests : IAsyncLifetime
         Assert.Equal(2, item.ComparisonCount);
     }
 
+    [Fact]
+    public async Task SetGameNotePath_PersistsAcrossLaterPlayniteSyncs()
+    {
+        var playniteId = Guid.NewGuid();
+        await repository.ApplySyncAsync(
+            Batch(Imported(playniteId, "Original name")),
+            DateTimeOffset.UtcNow);
+        var game = (await repository.GetActiveGamesAsync()).Single().Game;
+
+        const string notePath = "GameCompare/Games/Original name [12345678].md";
+        await repository.SetGameNotePathAsync(game.Id, notePath);
+        await repository.ApplySyncAsync(
+            Batch(Imported(playniteId, "Renamed in Playnite")),
+            DateTimeOffset.UtcNow);
+
+        var reloaded = (await repository.GetActiveGamesAsync()).Single().Game;
+        Assert.Equal("Renamed in Playnite", reloaded.Name);
+        Assert.Equal(notePath, reloaded.NotePath);
+    }
+
     private static PlayniteImportBatch Batch(params ImportedGame[] games) => new(
         "test",
         "test/library",

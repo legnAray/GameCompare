@@ -2,6 +2,8 @@
 @inject AppSettingsService SettingsService
 @inject FolderPickerService FolderPicker
 @inject IPlayniteImporter Importer
+@inject ObsidianNoteFileService NoteFiles
+@inject ObsidianUriLauncher ObsidianLauncher
 
 <PageTitle>设置 · GameCompare</PageTitle>
 
@@ -9,7 +11,7 @@
     <div>
         <p class="eyebrow">SETTINGS</p>
         <h1>设置</h1>
-        <p class="page-description">告诉 GameCompare 去哪里寻找你的 Playnite 游戏库。</p>
+        <p class="page-description">连接 Playnite 游戏库，以及用于保存玩后感的 Obsidian Vault。</p>
     </div>
 </header>
 
@@ -28,15 +30,49 @@
         <button class="button secondary" @onclick="Browse">浏览…</button>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(message))
+    @if (!string.IsNullOrWhiteSpace(playniteMessage))
     {
-        <div class="inline-status @(isError ? "status-error" : "status-success")">@message</div>
+        <div class="inline-status @(playniteIsError ? "status-error" : "status-success")">@playniteMessage</div>
     }
 
     <div class="settings-actions">
-        <button class="button primary" @onclick="SaveAsync" disabled="@isBusy">保存设置</button>
-        <button class="button ghost" @onclick="ValidateAsync" disabled="@isBusy">
-            @(isBusy ? "正在读取…" : "验证并统计 Completed")
+        <button class="button primary" @onclick="SavePlayniteAsync" disabled="@isPlayniteBusy">保存 Playnite 设置</button>
+        <button class="button ghost" @onclick="ValidatePlayniteAsync" disabled="@isPlayniteBusy">
+            @(isPlayniteBusy ? "正在读取…" : "验证并统计 Completed")
+        </button>
+    </div>
+</section>
+
+<section class="settings-panel">
+    <div class="settings-heading">
+        <div class="settings-icon obsidian-icon">O</div>
+        <div>
+            <h2>Obsidian 玩后感</h2>
+            <p>选择已有 Vault 的根目录。GameCompare 只在指定子目录创建笔记，不会覆盖已有正文。</p>
+        </div>
+    </div>
+
+    <label class="field-label" for="obsidian-vault-path">Vault 根目录</label>
+    <div class="path-editor">
+        <input id="obsidian-vault-path" class="text-control" @bind="obsidianVaultPath" />
+        <button class="button secondary" @onclick="BrowseObsidianVault">浏览…</button>
+    </div>
+
+    <label class="field-label spaced-field" for="obsidian-notes-directory">Vault 内的游戏笔记子目录</label>
+    <input id="obsidian-notes-directory" class="text-control" @bind="obsidianNotesDirectory" />
+    <p class="field-help">默认使用 <code>GameCompare/Games</code>。这里只能填写相对路径，笔记不会写到 Vault 之外。</p>
+
+    @if (!string.IsNullOrWhiteSpace(obsidianMessage))
+    {
+        <div class="inline-status @(obsidianIsError ? "status-error" : "status-success")">@obsidianMessage</div>
+    }
+
+    <div class="settings-actions">
+        <button class="button primary" @onclick="SaveObsidianAsync" disabled="@isObsidianBusy">
+            @(isObsidianBusy ? "正在保存…" : "保存 Obsidian 设置")
+        </button>
+        <button class="button ghost" @onclick="OpenObsidianVaultAsync" disabled="@isObsidianBusy">
+            在 Obsidian 中打开
         </button>
     </div>
 </section>
@@ -47,20 +83,29 @@
         <div>
             <h2>数据如何保存</h2>
             <p>Playnite 数据仅以只读方式导入。本程序自己的游戏快照、比较记录与排名保存在本机
-                <code>%LocalAppData%\GameCompare</code>，不会修改 Playnite。</p>
+                <code>%LocalAppData%\GameCompare</code>，不会修改 Playnite。玩后感保存在你选择的 Vault 中，
+                数据库只记录相对路径。</p>
         </div>
     </div>
 </section>
 
 @code {
     private string playnitePath = string.Empty;
-    private string? message;
-    private bool isError;
-    private bool isBusy;
+    private string obsidianVaultPath = string.Empty;
+    private string obsidianNotesDirectory = ObsidianNoteFileService.DefaultNotesDirectory;
+    private string? playniteMessage;
+    private string? obsidianMessage;
+    private bool playniteIsError;
+    private bool obsidianIsError;
+    private bool isPlayniteBusy;
+    private bool isObsidianBusy;
 
     protected override async Task OnInitializedAsync()
     {
-        playnitePath = (await SettingsService.LoadAsync()).PlaynitePath;
+        var settings = await SettingsService.LoadAsync();
+        playnitePath = settings.PlaynitePath;
+        obsidianVaultPath = settings.ObsidianVaultPath;
+        obsidianNotesDirectory = settings.ObsidianNotesDirectory;
     }
 
     private void Browse()
@@ -69,64 +114,158 @@
         if (!string.IsNullOrWhiteSpace(selected))
         {
             playnitePath = selected;
-            message = null;
+            playniteMessage = null;
         }
     }
 
-    private async Task SaveAsync()
+    private void BrowseObsidianVault()
     {
-        if (!ValidatePath())
+        var selected = FolderPicker.PickObsidianVaultDirectory(obsidianVaultPath);
+        if (!string.IsNullOrWhiteSpace(selected))
+        {
+            obsidianVaultPath = selected;
+            obsidianMessage = null;
+        }
+    }
+
+    private async Task SavePlayniteAsync()
+    {
+        if (!ValidatePlaynitePath())
         {
             return;
         }
 
-        await SettingsService.SaveAsync(new AppSettings(Path.GetFullPath(playnitePath.Trim())));
-        isError = false;
-        message = "设置已保存。";
+        var current = await SettingsService.LoadAsync();
+        await SettingsService.SaveAsync(current with
+        {
+            PlaynitePath = Path.GetFullPath(playnitePath.Trim())
+        });
+        playniteIsError = false;
+        playniteMessage = "Playnite 设置已保存。";
     }
 
-    private async Task ValidateAsync()
+    private async Task ValidatePlayniteAsync()
     {
-        if (!ValidatePath() || isBusy)
+        if (!ValidatePlaynitePath() || isPlayniteBusy)
         {
             return;
         }
 
-        isBusy = true;
-        message = null;
+        isPlayniteBusy = true;
+        playniteMessage = null;
         try
         {
             var batch = await Importer.ImportCompletedGamesAsync(playnitePath.Trim());
-            isError = false;
-            message = $"读取成功：找到 {batch.Games.Count} 款 Completed 游戏。";
+            playniteIsError = false;
+            playniteMessage = $"读取成功：找到 {batch.Games.Count} 款 Completed 游戏。";
         }
         catch (Exception exception)
         {
-            isError = true;
-            message = exception.Message;
+            playniteIsError = true;
+            playniteMessage = exception.Message;
         }
         finally
         {
-            isBusy = false;
+            isPlayniteBusy = false;
         }
     }
 
-    private bool ValidatePath()
+    private async Task SaveObsidianAsync()
+    {
+        if (!TryGetObsidianSettings(out var vaultRoot, out var notesDirectory) || isObsidianBusy)
+        {
+            return;
+        }
+
+        isObsidianBusy = true;
+        try
+        {
+            var current = await SettingsService.LoadAsync();
+            await SettingsService.SaveAsync(current with
+            {
+                ObsidianVaultPath = vaultRoot,
+                ObsidianNotesDirectory = notesDirectory
+            });
+            obsidianVaultPath = vaultRoot;
+            obsidianNotesDirectory = notesDirectory;
+            obsidianIsError = false;
+            obsidianMessage = Directory.Exists(Path.Combine(vaultRoot, ".obsidian"))
+                ? "Obsidian 设置已保存。现在可以从游戏卡片创建或打开玩后感。"
+                : "设置已保存，但没有发现 .obsidian 配置目录；请确认你选择的是 Vault 根目录。";
+        }
+        catch (Exception exception)
+        {
+            obsidianIsError = true;
+            obsidianMessage = exception.Message;
+        }
+        finally
+        {
+            isObsidianBusy = false;
+        }
+    }
+
+    private async Task OpenObsidianVaultAsync()
+    {
+        if (!TryGetObsidianSettings(out var vaultRoot, out _) || isObsidianBusy)
+        {
+            return;
+        }
+
+        isObsidianBusy = true;
+        try
+        {
+            ObsidianLauncher.OpenPath(vaultRoot);
+            obsidianIsError = false;
+            obsidianMessage = "已请求 Obsidian 打开这个 Vault。";
+            await Task.CompletedTask;
+        }
+        catch (Exception exception)
+        {
+            obsidianIsError = true;
+            obsidianMessage = exception.Message;
+        }
+        finally
+        {
+            isObsidianBusy = false;
+        }
+    }
+
+    private bool ValidatePlaynitePath()
     {
         if (string.IsNullOrWhiteSpace(playnitePath))
         {
-            isError = true;
-            message = "请先选择 Playnite 数据目录。";
+            playniteIsError = true;
+            playniteMessage = "请先选择 Playnite 数据目录。";
             return false;
         }
 
         if (!PlaynitePathDetector.IsPlayniteDataDirectory(playnitePath.Trim()))
         {
-            isError = true;
-            message = "该目录下没有找到 Playnite 的 library 数据库。";
+            playniteIsError = true;
+            playniteMessage = "该目录下没有找到 Playnite 的 library 数据库。";
             return false;
         }
 
         return true;
+    }
+
+    private bool TryGetObsidianSettings(out string vaultRoot, out string notesDirectory)
+    {
+        vaultRoot = string.Empty;
+        notesDirectory = string.Empty;
+        try
+        {
+            vaultRoot = Path.GetFullPath(obsidianVaultPath.Trim());
+            notesDirectory = obsidianNotesDirectory.Trim()
+                .Replace('\\', '/');
+            _ = NoteFiles.ResolveNotesRoot(vaultRoot, notesDirectory);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            obsidianIsError = true;
+            obsidianMessage = exception.Message;
+            return false;
+        }
     }
 }

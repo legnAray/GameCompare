@@ -166,6 +166,24 @@ public sealed class GameRepository(IDbContextFactory<GameCompareDbContext> conte
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task SetGameNotePathAsync(
+        Guid gameId,
+        string relativePath,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            throw new ArgumentException("Note path cannot be empty.", nameof(relativePath));
+        }
+
+        await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var game = await database.Games.SingleOrDefaultAsync(
+            item => item.Id == gameId,
+            cancellationToken) ?? throw new InvalidOperationException("The selected game no longer exists.");
+        game.NotePath = relativePath.Trim();
+        await database.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<SyncRun?> GetLatestSyncRunAsync(CancellationToken cancellationToken = default)
     {
         await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);

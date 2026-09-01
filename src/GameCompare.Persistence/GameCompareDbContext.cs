@@ -22,6 +22,7 @@ public sealed class GameCompareDbContext(DbContextOptions<GameCompareDbContext> 
         games.HasIndex(game => game.PlayniteId).IsUnique();
         games.HasIndex(game => game.IsActiveCompleted);
         games.Property(game => game.Name).HasMaxLength(500);
+        games.Property(game => game.NotePath).HasMaxLength(2048);
         games.Property(game => game.PlaytimeSeconds).HasConversion<long>();
 
         var events = modelBuilder.Entity<ComparisonEvent>();

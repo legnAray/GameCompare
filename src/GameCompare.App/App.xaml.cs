@@ -33,9 +33,12 @@ public partial class App : Application
             services.AddSingleton<IPairSelectionStrategy, BalancedPairSelectionStrategy>();
             services.AddSingleton<GameSyncService>();
             services.AddSingleton<GameComparisonService>();
+            services.AddSingleton<ObsidianNoteFileService>();
             services.AddSingleton<AppSettingsService>();
             services.AddSingleton<CoverImageService>();
             services.AddSingleton<FolderPickerService>();
+            services.AddSingleton<ObsidianUriLauncher>();
+            services.AddSingleton<ObsidianNotesService>();
             services.AddSingleton<MainWindow>();
 
             serviceProvider = services.BuildServiceProvider();

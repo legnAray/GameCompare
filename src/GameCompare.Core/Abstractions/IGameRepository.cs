@@ -31,5 +31,10 @@ public interface IGameRepository
         IReadOnlyCollection<RatingState> ratingStates,
         CancellationToken cancellationToken = default);
 
+    Task SetGameNotePathAsync(
+        Guid gameId,
+        string relativePath,
+        CancellationToken cancellationToken = default);
+
     Task<SyncRun?> GetLatestSyncRunAsync(CancellationToken cancellationToken = default);
 }

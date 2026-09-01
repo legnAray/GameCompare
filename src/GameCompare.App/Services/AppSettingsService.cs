@@ -1,11 +1,19 @@
 using System.IO;
 using System.Text.Json;
+using GameCompare.Core.Services;
 using GameCompare.Persistence;
 using GameCompare.Playnite;
 
 namespace GameCompare.App.Services;
 
-public sealed record AppSettings(string PlaynitePath);
+public sealed record AppSettings
+{
+    public string PlaynitePath { get; init; } = string.Empty;
+
+    public string ObsidianVaultPath { get; init; } = string.Empty;
+
+    public string ObsidianNotesDirectory { get; init; } = ObsidianNoteFileService.DefaultNotesDirectory;
+}
 
 public sealed class AppSettingsService
 {
@@ -27,10 +35,11 @@ public sealed class AppSettingsService
             }
 
             await using var stream = File.OpenRead(AppDataPaths.SettingsPath);
-            return await JsonSerializer.DeserializeAsync<AppSettings>(
-                       stream,
-                       JsonOptions,
-                       cancellationToken) ?? CreateDefault();
+            var settings = await JsonSerializer.DeserializeAsync<AppSettings>(
+                stream,
+                JsonOptions,
+                cancellationToken);
+            return Normalize(settings ?? CreateDefault());
         }
         catch (JsonException)
         {
@@ -49,7 +58,11 @@ public sealed class AppSettingsService
         {
             Directory.CreateDirectory(AppDataPaths.RootDirectory);
             await using var stream = File.Create(AppDataPaths.SettingsPath);
-            await JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken);
+            await JsonSerializer.SerializeAsync(
+                stream,
+                Normalize(settings),
+                JsonOptions,
+                cancellationToken);
         }
         finally
         {
@@ -57,6 +70,17 @@ public sealed class AppSettingsService
         }
     }
 
-    private static AppSettings CreateDefault() =>
-        new(PlaynitePathDetector.DetectDefaultPath() ?? string.Empty);
+    private static AppSettings CreateDefault() => new()
+    {
+        PlaynitePath = PlaynitePathDetector.DetectDefaultPath() ?? string.Empty
+    };
+
+    private static AppSettings Normalize(AppSettings settings) => settings with
+    {
+        PlaynitePath = settings.PlaynitePath ?? string.Empty,
+        ObsidianVaultPath = settings.ObsidianVaultPath ?? string.Empty,
+        ObsidianNotesDirectory = string.IsNullOrWhiteSpace(settings.ObsidianNotesDirectory)
+            ? ObsidianNoteFileService.DefaultNotesDirectory
+            : settings.ObsidianNotesDirectory
+    };
 }

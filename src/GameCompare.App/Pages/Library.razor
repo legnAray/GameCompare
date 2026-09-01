@@ -4,6 +4,7 @@
 @inject GameComparisonService ComparisonService
 @inject AppSettingsService SettingsService
 @inject CoverImageService CoverImages
+@inject ObsidianNotesService ObsidianNotes
 
 <PageTitle>游戏库 · GameCompare</PageTitle>
 
@@ -31,6 +32,21 @@ else if (!string.IsNullOrWhiteSpace(successMessage))
     <div class="notice success" role="status">
         <strong>同步完成</strong>
         <span>@successMessage</span>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(noteErrorMessage))
+{
+    <div class="notice error" role="alert">
+        <strong>玩后感没有打开</strong>
+        <span>@noteErrorMessage <a class="notice-link" href="settings">检查 Obsidian 设置</a></span>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(noteSuccessMessage))
+{
+    <div class="notice success" role="status">
+        <strong>玩后感已就绪</strong>
+        <span>@noteSuccessMessage</span>
     </div>
 }
 
@@ -101,6 +117,19 @@ else
                             <span>@FormatPlaytime(item.Game.PlaytimeSeconds)</span>
                             <span>@item.ComparisonCount 次比较</span>
                         </div>
+                        <button class="note-button @(item.Game.NotePath is null ? null : "linked")"
+                                @onclick="() => OpenNoteAsync(item.Game)"
+                                disabled="@(openingNoteGameId is not null)">
+                            <span class="note-button-icon">✎</span>
+                            @if (openingNoteGameId == item.Game.Id)
+                            {
+                                <span>正在打开…</span>
+                            }
+                            else
+                            {
+                                <span>@(item.Game.NotePath is null ? "写玩后感" : "打开玩后感")</span>
+                            }
+                        </button>
                     </div>
                 </article>
             }
@@ -117,6 +146,9 @@ else
     private string sortMode = "name";
     private string? errorMessage;
     private string? successMessage;
+    private string? noteErrorMessage;
+    private string? noteSuccessMessage;
+    private Guid? openingNoteGameId;
 
     private IReadOnlyList<GameListItem> VisibleGames
     {
@@ -186,6 +218,34 @@ else
     {
         games = await Repository.GetActiveGamesAsync();
         latestSync = await Repository.GetLatestSyncRunAsync();
+    }
+
+    private async Task OpenNoteAsync(GameRecord game)
+    {
+        if (openingNoteGameId is not null)
+        {
+            return;
+        }
+
+        openingNoteGameId = game.Id;
+        noteErrorMessage = null;
+        noteSuccessMessage = null;
+        try
+        {
+            var result = await ObsidianNotes.OpenOrCreateAsync(game);
+            var fileName = Path.GetFileNameWithoutExtension(result.FullPath);
+            noteSuccessMessage = result.Created
+                ? $"已创建“{fileName}”并交给 Obsidian 打开。"
+                : $"已交给 Obsidian 打开“{fileName}”。";
+        }
+        catch (Exception exception)
+        {
+            noteErrorMessage = exception.Message;
+        }
+        finally
+        {
+            openingNoteGameId = null;
+        }
     }
 
     private static string SearchText(GameListItem item) => string.Join(' ',

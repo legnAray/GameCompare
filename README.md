@@ -8,6 +8,7 @@
 
 1. 从 Playnite 中导入已经标记为 `Completed` 的游戏，形成个人已通关游戏列表。
 2. 不要求用户直接给游戏打分，而是反复展示两款游戏，让用户选择更喜欢的一款，再根据比较记录计算个人排名。
+3. 将每款游戏关联到 Obsidian Markdown 笔记，用熟悉的工具记录玩后感。
 
 程序采用本地优先设计：游戏资料、比较记录和排名全部保存在本机，不依赖云端服务，也不修改 Playnite 数据。
 
@@ -111,18 +112,34 @@
 
 第一版可以使用简单 Elo 算法形成可用排名，但数据结构不能绑定到 Elo。以后应能使用全部历史比较记录重新计算 Bradley–Terry、TrueSkill 或其他算法。
 
+### 3.5 Obsidian 玩后感
+
+设置页可以选择一个已有的 Obsidian Vault，以及 Vault 内的游戏笔记子目录，默认使用
+`GameCompare/Games`。游戏库中的每张卡片都提供“写玩后感”或“打开玩后感”按钮。
+
+首次点击时，程序会：
+
+1. 在指定子目录创建 UTF-8 Markdown 文件。
+2. 写入 Playnite ID、名称、发行日期、开发商等 YAML 属性，以及基础玩后感模板。
+3. 将 Vault 内的相对路径保存到本程序数据库。
+4. 通过 `obsidian://open?path=...` 交给 Obsidian 打开。
+
+已有 Markdown 文件永远不会被覆盖。如果笔记在配置的游戏笔记目录内被移动，程序会通过
+`playnite_id` 属性重新发现并更新关联路径。笔记目录必须是 Vault 内的相对路径，不能通过
+`..` 等方式写到 Vault 之外。
+
 ## 4. 暂不纳入第一版
 
 - 不做 Playnite 实时监听
 - 不向 Playnite 写入排名或评分
 - 不开发内置 Markdown 编辑器
-- 玩后感暂时继续由 Obsidian 管理
+- 玩后感正文继续完全由 Obsidian 管理
 - 不实现 Obsidian 插件、双向实时同步或附件管理
 - 不开发手机端或云同步
 - 不在第一版追求完整复刻 Obsidian、Steam 或 Playnite 的界面
 - 不在第一阶段确定最终排名算法
 
-可以在游戏表中预留可空的 `NotePath` 字段，为以后关联 Obsidian Markdown 文件保留接口，但首版不提供相关 UI。
+游戏表中的可空 `NotePath` 字段保存 Vault 内的相对路径；Playnite 再同步不会清除这个关联。
 
 ## 5. 推荐技术方案
 
@@ -286,6 +303,10 @@ artifacts\GameCompare\GameCompare.App.exe
 程序自己的数据库和设置位于 `%LocalAppData%\GameCompare`。首次同步前应完全关闭 Playnite。
 Playnite 10 的 LiteDB 4 兼容性与安全边界记录在 [SECURITY.md](SECURITY.md)。
 
+要启用玩后感，请先在“设置 → Obsidian 玩后感”中选择已有 Vault 的根目录。程序不会在安装目录
+创建 Vault，也不会修改已有笔记正文。Windows 上应至少启动过一次 Obsidian，以便系统注册
+`obsidian://` 协议。
+
 ## 10. 开发阶段与任务清单
 
 ### 阶段 0：项目骨架
@@ -341,6 +362,17 @@ Playnite 10 的 LiteDB 4 兼容性与安全边界记录在 [SECURITY.md](SECURIT
 - [x] 完善首版异常处理和日志
 - [ ] 发布打包
 
+### 阶段 5：Obsidian 玩后感
+
+- [x] 支持选择已有 Vault 和笔记子目录
+- [x] 从游戏卡片创建或打开 Markdown 玩后感
+- [x] 使用 Playnite ID 生成稳定关联并处理重名游戏
+- [x] 防止路径越出 Vault
+- [x] 保证已有笔记正文不被覆盖
+- [x] 笔记移动后通过 YAML 中的 Playnite ID 重新发现
+- [x] 使用 Obsidian URI 打开笔记
+- [ ] 可选封面复制和自定义笔记模板
+
 ## 11. MVP 完成标准
 
 满足以下条件即可认为第一版可用：
@@ -354,6 +386,7 @@ Playnite 10 的 LiteDB 4 兼容性与安全边界记录在 [SECURITY.md](SECURIT
 7. 关闭并重新打开程序后，游戏列表、比较记录和排名仍然存在。
 8. Playnite 原始文件没有被修改。
 9. 同步失败时能够给出清楚且可操作的错误提示。
+10. 配置 Vault 后可以创建并再次打开玩后感，且用户正文不会被程序覆盖。
 
 ## 12. 后续再决定的问题
 
@@ -364,7 +397,7 @@ Playnite 10 的 LiteDB 4 兼容性与安全边界记录在 [SECURITY.md](SECURIT
 - 是否加入按系列、平台和类型分别排名
 - 是否加入撤销上一条比较
 - 是否支持导出排名图片、CSV 或 Markdown
-- 何时加入 Obsidian 玩后感关联
+- 是否允许自定义 Obsidian 笔记模板和封面附件目录
 
 ## 13. 参考资料
 
