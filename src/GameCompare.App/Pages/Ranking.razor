@@ -7,7 +7,7 @@
     <div>
         <p class="eyebrow">PERSONAL RANKING</p>
         <h1>我的游戏排名</h1>
-        <p class="page-description">排名由主动采样与自适应 Elo 生成；比较越多，结果越稳定。</p>
+        <p class="page-description">排名由主动采样与自适应 Elo 生成，并以 60–100 偏好分呈现。</p>
     </div>
     <a class="button primary" href="compare">继续比较</a>
 </header>
@@ -59,8 +59,8 @@ else
                     <div class="confidence-track"><div class="confidence-fill" style="@($"width: {Confidence(item)}%")"></div></div>
                 </div>
                 <div class="rating-value">
-                    <strong>@(item.Rating?.ToString("0") ?? "—")</strong>
-                    <span>@item.ComparisonCount 次比较</span>
+                    <strong>@DisplayScore(item)</strong>
+                    <span>偏好分 · @item.ComparisonCount 次比较</span>
                 </div>
             </article>
         }
@@ -97,6 +97,11 @@ else
 
     private static int Confidence(GameListItem item) =>
         (int)Math.Round(Math.Clamp(1d - (item.Uncertainty ?? 1d), 0d, 1d) * 100d);
+
+    private static string DisplayScore(GameListItem item) =>
+        item.Rating is double rating
+            ? RatingDisplayScale.ToDisplayScore(rating).ToString(CultureInfo.InvariantCulture)
+            : "—";
 
     private static string RankMetadata(GameRecord game)
     {
