@@ -237,11 +237,14 @@ public sealed class ObsidianNoteFileService
         builder.AppendLine();
         builder.AppendLine("## 一句话评价");
         builder.AppendLine();
-        builder.AppendLine("## 玩后感");
+        builder.AppendLine("## 整体感受");
         builder.AppendLine();
         builder.AppendLine("## 最喜欢的部分");
         builder.AppendLine();
         builder.AppendLine("## 不足与遗憾");
+        builder.AppendLine();
+        builder.AppendLine("## 余味");
+        builder.AppendLine();
         return builder.ToString();
     }
 

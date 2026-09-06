@@ -32,7 +32,20 @@ public sealed class ObsidianNoteFileServiceTests
             Assert.Equal(created.FullPath, reopened.FullPath);
             Assert.Contains($"playnite_id: \"{game.PlayniteId:D}\"", initialContent);
             Assert.Contains("title: \"NieR:Automata\"", initialContent);
-            Assert.Contains("## 玩后感", initialContent);
+            Assert.Equal(
+                new[]
+                {
+                    "## 一句话评价",
+                    "## 整体感受",
+                    "## 最喜欢的部分",
+                    "## 不足与遗憾",
+                    "## 余味"
+                },
+                initialContent
+                    .Split('\n')
+                    .Select(line => line.TrimEnd('\r'))
+                    .Where(line => line.StartsWith("## ", StringComparison.Ordinal))
+                    .ToArray());
             Assert.Contains("我的正文不会被覆盖。", finalContent);
         }
         finally
